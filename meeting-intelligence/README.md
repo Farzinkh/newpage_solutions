@@ -34,7 +34,13 @@ make ui                         # Streamlit on :8501 (separate terminal)
 python scripts/seed.py          # load the three sample meetings
 ```
 
-Docker: `docker compose up --build` starts the API (`:8000`) and UI (`:8501`).
+Docker:
+- **Zero-key demo** (fake backends, auto-seeded, lightweight image):
+  `docker compose -f docker-compose.demo.yml up --build` → UI on
+  **http://localhost:8501**, API on `:8000`. Click an example prompt to see a
+  cited answer.
+- **Real profile** (local embeddings + Chroma + a hosted LLM):
+  `docker compose up --build` → UI on `:8501`, API on `:8000`.
 
 ---
 

@@ -1,0 +1,22 @@
+# Lightweight image for the ZERO-KEY demo (fake embedder, in-memory store, echo
+# LLM). The fake backends use lazy imports, so none of the ML stack is needed —
+# this image builds in seconds. See `Dockerfile` for the full/real-profile image.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+RUN pip install "fastapi[standard]" "uvicorn" "pydantic>=2" "pydantic-settings>=2" \
+    "requests" "streamlit==1.39.0"
+
+COPY app ./app
+COPY data ./data
+COPY scripts ./scripts
+COPY ui ./ui
+COPY eval ./eval
+
+EXPOSE 8000 8501
+CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]

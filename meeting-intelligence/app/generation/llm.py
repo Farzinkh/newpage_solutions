@@ -19,12 +19,20 @@ class EchoLLM(LLMClient):
     can_generate = False  # extractive only — no rewriting, no abstractive text
 
     def complete(self, system: str, user: str) -> str:
-        # Pull the first "[n] ..." context block out of the user prompt and
-        # echo it back with a citation, mimicking a grounded extractive answer.
-        m = re.search(r"\[(\d+)\]\s*\([^)]*\)\s*(.+)", user)
-        if not m:
+        # Echo back the first *hit* excerpt with its citation, mimicking a
+        # grounded extractive answer. Skip excerpts marked "(context)" (the
+        # neighbouring turns added for context) so the answer lands on a real
+        # hit rather than a surrounding line.
+        first = None
+        for m in re.finditer(r"\[(\d+)\]\s*\([^)]*\)\s*(.+)", user):
+            text = m.group(2).strip()
+            if first is None:
+                first = (m.group(1), text)
+            if not text.startswith("(context)"):
+                return f"{text} [{m.group(1)}]"
+        if first is None:
             return "Not discussed in the transcript."
-        return f"{m.group(2).strip()} [{m.group(1)}]"
+        return f"{first[1]} [{first[0]}]"
 
 
 class OpenAILLM(LLMClient):

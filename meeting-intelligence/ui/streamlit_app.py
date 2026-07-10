@@ -137,11 +137,24 @@ if selected_meeting and selected_meeting != "All":
     except requests.RequestException:
         pass
 
+st.markdown("**Try an example** — click to ask:")
+EXAMPLES = [
+    "List all the action items across every meeting",
+    "What was the root cause of the payment outage?",
+    "What caused the outage and what did we change about on-call?",
+    "Which candidate are we advancing to onsite?",
+]
+_clicked = None
+_cols = st.columns(2)
+for _i, _ex in enumerate(EXAMPLES):
+    if _cols[_i % 2].button(_ex, key=f"ex_{_i}", use_container_width=True):
+        _clicked = _ex
+
 for turn in st.session_state.history:
     with st.chat_message(turn["role"]):
         st.markdown(turn["content"])
 
-if question := st.chat_input("Ask about the meetings..."):
+if question := (_clicked or st.chat_input("Ask about the meetings...")):
     st.session_state.history.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)

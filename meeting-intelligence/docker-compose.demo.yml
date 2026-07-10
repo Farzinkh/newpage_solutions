@@ -1,0 +1,50 @@
+# Zero-key demo stack: API + auto-seeded sample meetings + Streamlit UI.
+# Fake embedder, in-memory store, echo LLM — no API keys, no model downloads.
+#
+#   docker compose -f docker-compose.demo.yml up --build
+#   open http://localhost:8501
+#
+# If ports 8000/8501 are already taken, remap the host side below (e.g. 18000:8000).
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.demo
+    ports:
+      - "8000:8000"
+    environment:
+      EMBEDDER_BACKEND: fake
+      VECTOR_STORE_BACKEND: memory
+      RERANKER_BACKEND: noop
+      LLM_BACKEND: echo
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  # One-shot: waits for the API, loads the three sample meetings, exits.
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile.demo
+    command: python scripts/seed.py
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: "no"
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.demo
+    command: streamlit run ui/streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
