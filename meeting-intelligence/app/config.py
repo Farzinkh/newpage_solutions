@@ -61,6 +61,17 @@ class Settings(BaseSettings):
     retrieve_top_n: int = 20  # wide net for the reranker
     final_top_k: int = 4  # what the LLM actually sees
 
+    # --- Two-stage / cross-meeting retrieval --------------------------------
+    # Stage 1 picks the meetings that matter and injects their briefs; stage 2
+    # digs the exact hits and expands each with its neighbouring turns.
+    max_meetings: int = 3  # how many meetings a cross-meeting answer may span
+    per_meeting_hits: int = 3  # hits to dig per selected meeting
+    context_window: int = 1  # turns of before/after context around each hit
+    # Optional first LLM pass: read the briefs, form an early hypothesis of which
+    # meeting matters and what to look for, then answer. Needs a generative LLM,
+    # so it's off by default (the keyless EchoLLM can't reason).
+    two_pass_reasoning: bool = False
+
     # --- Ingestion ----------------------------------------------------------
     max_chunk_chars: int = 1200  # split turns longer than this on sentences
     redaction_enabled: bool = True

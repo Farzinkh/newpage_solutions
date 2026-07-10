@@ -49,5 +49,7 @@ def test_brief_is_injected_into_the_answer_prompt():
     s = _services_with(llm)
     s.ingestion.ingest_turns("m1", s.file_transcriber.to_turns(TRANSCRIPT))
     s.query("What is the risk on offline mode?", "m1")
-    assert "Meeting overview" in llm.last_user
+    # The grouped multi-meeting context labels the meeting and injects its brief.
+    assert "=== Meeting: m1 ===" in llm.last_user
+    assert "Overview:" in llm.last_user
     assert "Participants: Priya, Daniel, Maya" in llm.last_user

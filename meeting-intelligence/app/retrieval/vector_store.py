@@ -45,6 +45,14 @@ class InMemoryVectorStore(VectorStore):
         scored.sort(key=lambda r: r.similarity, reverse=True)
         return scored[:top_n]
 
+    def fetch_turns(self, meeting_id: str, turn_indices: list[int]) -> list[Chunk]:
+        want = set(turn_indices)
+        out = [
+            c for c in self._chunks.values()
+            if c.meeting_id == meeting_id and c.turn_index in want
+        ]
+        return sorted(out, key=lambda c: c.turn_index)
+
     def list_meetings(self) -> list[str]:
         return sorted({c.meeting_id for c in self._chunks.values()})
 
@@ -101,6 +109,35 @@ class ChromaVectorStore(VectorStore):
                 )
             )
         return out
+
+    def fetch_turns(self, meeting_id: str, turn_indices: list[int]) -> list[Chunk]:
+        if not turn_indices:
+            return []
+        got = self._col.get(
+            where={
+                "$and": [
+                    {"meeting_id": {"$eq": meeting_id}},
+                    {"turn_index": {"$in": list(turn_indices)}},
+                ]
+            },
+            include=["documents", "metadatas"],
+        )
+        ids = got.get("ids", [])
+        docs = got.get("documents", [])
+        metas = got.get("metadatas", [])
+        chunks = [
+            Chunk(
+                id=cid,
+                meeting_id=str(meta["meeting_id"]),
+                speaker=str(meta["speaker"]),
+                timestamp=str(meta["timestamp"]),
+                text=doc,
+                turn_index=int(meta["turn_index"]),
+                occurred_at=str(meta["occurred_at"]) if meta.get("occurred_at") else None,
+            )
+            for cid, doc, meta in zip(ids, docs, metas, strict=False)
+        ]
+        return sorted(chunks, key=lambda c: c.turn_index)
 
     def list_meetings(self) -> list[str]:
         got = self._col.get(include=["metadatas"])

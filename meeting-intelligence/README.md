@@ -89,9 +89,11 @@ app/
   factory.py        # the ONLY place that picks concrete implementations
   models.py         # Turn / Chunk / RetrievedChunk / Citation / Answer
                     #   ExtractedItem / MeetingBrief / HistoryTurn
-  ingestion/        # parser, redactor, chunker, extractor, item_store, pipeline
+  ingestion/        # parser, redactor, chunker, extractor, timestamps,
+                    #   item_store, pipeline
   transcription/    # file + voice -> Turns
-  retrieval/        # embedder, vector_store, reranker, retriever
+  retrieval/        # embedder, vector_store, reranker, retriever,
+                    #   planner (two-stage cross-meeting + neighbour expansion)
   generation/       # llm clients, answerer, conversation (rewrite), aggregate
   api.py            # FastAPI transport (ingest/query/items/brief/meetings)
 ui/                 # Streamlit client (talks to the API, never imports core)
@@ -170,13 +172,26 @@ lot for meetings specifically, and each has its own mechanism:
    and every line is cited. The documented upgrade is an LLM extraction pass
    behind the same `ExtractedItem` seam.
 
-2. **Isolated chunks lose the meeting's narrative.** A turn retrieved on its own
-   doesn't know the meeting decided single-device-only or that Daniel owns the
-   doc. So at ingestion I derive a **meeting brief** — participants, decisions,
-   action items — and inject it as clearly-marked, *non-citable* background ahead
-   of the numbered excerpts. The model answers with the whole-meeting shape *and*
-   the specific retrieved turns, instead of just the fragments. (Same `/brief` is
-   exposed in the API and UI so it's inspectable.)
+2. **Isolated chunks lose the meeting's narrative — so retrieval is two-stage.**
+   A turn retrieved on its own doesn't know the meeting decided single-device-only
+   or that Daniel owns the doc, and a flat top-k across meetings can't tell which
+   meeting to trust. So the query path is **coarse-to-fine** (`retrieval/planner.py`):
+   - *Stage 1 (which meetings):* group the wide-net candidates by meeting, rank
+     meetings by their best hit, keep the top few (`MAX_MEETINGS`). Each selected
+     meeting contributes its **brief** — participants, decisions, action items,
+     derived once at ingestion — as clearly-marked, *non-citable* orientation.
+   - *Stage 2 (dig in):* for each meeting take its top hits (`PER_MEETING_HITS`)
+     and expand each with `CONTEXT_WINDOW` turns **before and after** (a metadata
+     lookup by `turn_index`, not a second similarity search), so the model reads
+     each quote *in the flow of the conversation*.
+
+   The answer prompt is then grouped by meeting: each block is an overview plus
+   its excerpts (hits and their `(context)` neighbours), every turn numbered and
+   citable. So a question spanning several meetings gets both the whole-meeting
+   shape of *each* relevant meeting and the local context around each hit —
+   instead of four orphaned fragments. An optional first LLM pass
+   (`TWO_PASS_REASONING`) reads the briefs and forms an early hypothesis of which
+   meeting matters before the answer pass. (`/brief` exposes a brief directly.)
 
 3. **A one-shot Q&A box isn't "conversational."** The brief asks for a
    *conversational* system, so `/query` takes prior turns. A follow-up like "who
@@ -184,6 +199,19 @@ lot for meetings specifically, and each has its own mechanism:
    for the keyless EchoLLM it degrades to carrying the previous question's terms)
    so retrieval has the referent, and the recent turns are also passed to the
    answer prompt to resolve references. Capped at `MAX_HISTORY_TURNS`.
+
+4. **Cross-meeting questions need attribution and absolute time.** A question can
+   pull turns from several meetings at once (search is unscoped by default). Two
+   things make that coherent instead of confusing: (a) every excerpt, citation,
+   and extracted item is **labelled with its meeting**; and (b) relative
+   transcript timestamps (`00:02:36`, which collide across meetings) are anchored
+   to **wall-clock datetimes** at ingestion — `meeting_start + offset`, where
+   `meeting_start` comes from the file name (`name_2026-06-03_1548.txt`) or an
+   explicit `started_at`. So `[2] (incident_retro · Omar @ 2026-06-05 10:15:33)`
+   is globally unambiguous. This is a strictly additive preprocessing step: with
+   no date in the name it falls back to the relative timestamp. (The parser also
+   strips the date/time back off to recover a stable `meeting_id`, so naming
+   conventions don't leak into identifiers or the eval.)
 
 **Prompt & context management.** The LLM gets, in order: the recent conversation
 (if any), the non-citable meeting brief (if scoped to a meeting), then a numbered

@@ -26,11 +26,18 @@ class Retriever:
     def retrieve(
         self, query: str, meeting_id: str | None, timings: dict[str, float]
     ) -> list[RetrievedChunk]:
+        candidates = self.candidates(query, meeting_id, timings)
+        with timed(timings, "rerank_ms"):
+            return self._reranker.rerank(query, candidates, top_k=self._settings.final_top_k)
+
+    def candidates(
+        self, query: str, meeting_id: str | None, timings: dict[str, float]
+    ) -> list[RetrievedChunk]:
+        """The wide-net top-N (similarity-ranked), before final truncation. The
+        two-stage planner groups these by meeting, so it needs the full set."""
         with timed(timings, "embed_ms"):
             qvec = self._embedder.embed_one(query)
         with timed(timings, "search_ms"):
-            candidates = self._store.search(
+            return self._store.search(
                 qvec, top_n=self._settings.retrieve_top_n, meeting_id=meeting_id
             )
-        with timed(timings, "rerank_ms"):
-            return self._reranker.rerank(query, candidates, top_k=self._settings.final_top_k)

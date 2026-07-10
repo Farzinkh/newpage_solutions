@@ -21,6 +21,7 @@ from app.interfaces import Embedder, Reranker, VectorStore
 from app.logging_config import log_event, timed
 from app.models import Answer, HistoryTurn
 from app.retrieval.embedder import FakeEmbedder, LocalEmbedder
+from app.retrieval.planner import plan_blocks
 from app.retrieval.reranker import (
     CohereReranker,
     LocalCrossEncoderReranker,
@@ -95,18 +96,23 @@ class Services:
                 answer = answer_from_items(intent, self.item_store.list(meeting_id))
                 route = f"aggregate:{intent}"
             else:
-                # Resolve a follow-up into a standalone query before retrieving.
+                # Two-stage retrieval. Stage 1: resolve any follow-up, pull the
+                # wide net, and pick which meeting(s) matter — each contributes
+                # its brief. Stage 2: dig the hits + their neighbouring turns.
                 search_q = rewrite_query(self.llm, hist, question)
-                chunks = self.retriever.retrieve(search_q, meeting_id, timings)
-                # Inject the relevant meeting's brief for whole-meeting context.
-                # When scope is "all meetings", use the top hit's meeting.
-                brief_id = meeting_id or (chunks[0].chunk.meeting_id if chunks else None)
-                brief = self.item_store.get_brief(brief_id)
-                answer = self.answerer.answer(
-                    question, chunks, timings, hist,
-                    brief=brief.render() if brief else None,
+                candidates = self.retriever.candidates(search_q, meeting_id, timings)
+                blocks = plan_blocks(
+                    self.vector_store, self.item_store, candidates,
+                    self.settings, meeting_id,
                 )
-                route = "retrieve"
+                focus = (
+                    self.answerer.early_focus(question, blocks)
+                    if self.settings.two_pass_reasoning else None
+                )
+                answer = self.answerer.answer_grouped(
+                    question, blocks, timings, hist, focus,
+                )
+                route = f"retrieve:{len(blocks)}mtg"
 
         chunks = answer.retrieved
         log_event(

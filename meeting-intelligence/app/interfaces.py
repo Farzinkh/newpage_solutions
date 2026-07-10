@@ -53,6 +53,12 @@ class VectorStore(ABC):
     ) -> list[RetrievedChunk]: ...
 
     @abstractmethod
+    def fetch_turns(self, meeting_id: str, turn_indices: list[int]) -> list[Chunk]:
+        """Fetch chunks by turn index within a meeting, ordered by turn index.
+        This is what powers before/after context expansion around a hit — a
+        metadata lookup, so it works on any store, not a similarity search."""
+
+    @abstractmethod
     def list_meetings(self) -> list[str]: ...
 
     @abstractmethod
