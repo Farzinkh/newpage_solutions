@@ -1,0 +1,32 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Override to point at real backends; defaults run key-free.
+      EMBEDDER_BACKEND: ${EMBEDDER_BACKEND:-local}
+      VECTOR_STORE_BACKEND: ${VECTOR_STORE_BACKEND:-chroma}
+      RERANKER_BACKEND: ${RERANKER_BACKEND:-noop}
+      LLM_BACKEND: ${LLM_BACKEND:-echo}
+      CHROMA_PATH: /data/.chroma
+      COHERE_API_KEY: ${COHERE_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - chroma:/data/.chroma
+
+  ui:
+    build: .
+    command: >
+      sh -c "pip install --no-cache-dir streamlit requests streamlit-mic-recorder &&
+             streamlit run ui/streamlit_app.py --server.port 8501 --server.address 0.0.0.0"
+    ports:
+      - "8501:8501"
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      - api
+
+volumes:
+  chroma:

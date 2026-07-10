@@ -1,0 +1,45 @@
+{
+  "description": "Retrieval gold set. Each item maps a question to the turn_index values in a given meeting that contain the answer. Used to compute hit-rate@k and MRR. Deliberately small and hand-curated — the point is to make retrieval quality measurable, not to be exhaustive.",
+  "cases": [
+    {
+      "meeting_id": "product_planning",
+      "question": "Did we commit offline mode for Q3?",
+      "relevant_turn_indices": [5]
+    },
+    {
+      "meeting_id": "product_planning",
+      "question": "What action items does Daniel own?",
+      "relevant_turn_indices": [6, 8, 11]
+    },
+    {
+      "meeting_id": "product_planning",
+      "question": "Why did we change the on-call rotation?",
+      "relevant_turn_indices": [9, 10, 11]
+    },
+    {
+      "meeting_id": "incident_retro",
+      "question": "What was the root cause of the payment outage?",
+      "relevant_turn_indices": [2]
+    },
+    {
+      "meeting_id": "incident_retro",
+      "question": "How long was the customer impact?",
+      "relevant_turn_indices": [4]
+    },
+    {
+      "meeting_id": "incident_retro",
+      "question": "What did we decide about config changes going forward?",
+      "relevant_turn_indices": [8]
+    },
+    {
+      "meeting_id": "hiring_sync",
+      "question": "Which candidate are we advancing to onsite?",
+      "relevant_turn_indices": [8]
+    },
+    {
+      "meeting_id": "hiring_sync",
+      "question": "What is the concern about the take-home exercise?",
+      "relevant_turn_indices": [15, 16]
+    }
+  ]
+}

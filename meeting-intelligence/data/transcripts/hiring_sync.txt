@@ -1,0 +1,17 @@
+[00:00:05] Grace: This is the hiring sync for the backend role. We have three candidates through to final round. Let's align on decisions.
+[00:00:18] Tom: Candidate A is strong on distributed systems but the take-home showed weak testing discipline. No tests on the core module.
+[00:00:33] Grace: Is that a dealbreaker or coachable?
+[00:00:40] Tom: Coachable, I think, but I'd want the onsite to probe testing habits directly.
+[00:00:51] Ravi: Candidate B is the opposite — excellent test coverage and clean code, but less depth on scaling. They've never run anything past a few thousand users.
+[00:01:08] Grace: For this role, which matters more? We're hiring for the platform team where scale is the whole job.
+[00:01:20] Ravi: Then depth on scaling should weight higher. I'd lean Candidate A with a testing-focused onsite.
+[00:01:33] Tom: I agree. Decision: advance Candidate A to onsite, with one interviewer dedicated to testing and code quality.
+[00:01:48] Grace: What about Candidate C?
+[00:01:53] Ravi: Candidate C withdrew yesterday. They took another offer.
+[00:02:02] Grace: Okay, so it's between A and B, and we're leaning A. Let's still keep B warm in case the onsite doesn't go well.
+[00:02:16] Tom: Agreed. Action item for me: schedule Candidate A's onsite for next week and brief the testing interviewer.
+[00:02:29] Grace: And I'll send Candidate B a friendly hold message so we don't lose them. Action item mine.
+[00:02:41] Ravi: One process note — our take-home is taking candidates six to eight hours. That's too long and we're losing people. We should cut it down.
+[00:02:57] Grace: Good point. Decision: trim the take-home to a two-hour scope before the next req opens. Ravi, can you draft the shorter version?
+[00:03:10] Ravi: Yes, I'll draft it by next Friday.
+[00:03:18] Grace: Great. Let's wrap. Recap: advance A to onsite with testing focus, keep B warm, trim the take-home. Thanks everyone.

@@ -1,0 +1,15 @@
+[00:00:04] Priya: Morning everyone. Today we need to lock the Q3 roadmap and decide whether the mobile offline mode ships this quarter.
+[00:00:19] Daniel: Before that, quick context: last quarter we slipped the search rewrite by three weeks because of the flaky test suite. I don't want a repeat.
+[00:00:34] Priya: Agreed. So decision one — do we commit offline mode for Q3? Daniel, what's the engineering read?
+[00:00:47] Daniel: It's doable but tight. The sync conflict resolution is the risky part. If we timebox it to four weeks and cut multi-device merge, I'm comfortable committing.
+[00:01:05] Maya: From the product side, offline mode is the top request from enterprise. Cutting multi-device merge is fine for v1 — most of those users are single-device in the field.
+[00:01:22] Priya: Okay. Decision: offline mode ships in Q3, single-device only, four-week timebox. Daniel owns it. Multi-device merge moves to the Q4 backlog.
+[00:01:40] Daniel: Works. I'll write the design doc by Friday and tag Maya for review.
+[00:01:52] Maya: I also want us to add usage analytics to offline mode so we can measure adoption. Can we squeeze that in?
+[00:02:07] Daniel: Analytics events are cheap to add. I'll include them in the same design doc. Action item for me.
+[00:02:20] Priya: Good. Second topic — the on-call rotation. We've had three weekends in a row where the same two people covered. That's not sustainable.
+[00:02:38] Maya: I can join the rotation starting next sprint. That gives us five people instead of three.
+[00:02:51] Daniel: Let's also cap on-call at one weekend per person per month. I'll update the schedule.
+[00:03:04] Priya: Perfect. So action items: Daniel writes the offline design doc with analytics by Friday, Maya joins on-call next sprint, Daniel updates the on-call cap. Anything else?
+[00:03:22] Maya: One admin thing — if anyone needs to reach me while I'm travelling next week, email me at maya.roberts@example.com or call 415-555-0142.
+[00:03:35] Priya: Noted. Thanks all, let's wrap.
