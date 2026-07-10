@@ -76,6 +76,7 @@ def chunk_turns(meeting_id: str, turns: list[Turn], max_chunk_chars: int) -> lis
                     timestamp=turn.timestamp,
                     text=part_text,
                     turn_index=turn.index,
+                    occurred_at=turn.occurred_at,
                 )
             )
     return chunks

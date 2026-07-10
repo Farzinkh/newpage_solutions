@@ -93,6 +93,9 @@ class ChromaVectorStore(VectorStore):
                         timestamp=str(meta["timestamp"]),
                         text=doc,
                         turn_index=int(meta["turn_index"]),
+                        occurred_at=(
+                            str(meta["occurred_at"]) if meta.get("occurred_at") else None
+                        ),
                     ),
                     similarity=1.0 - float(dist),  # cosine distance -> similarity
                 )

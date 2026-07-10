@@ -17,8 +17,11 @@ class Turn(BaseModel):
 
     index: int
     speaker: str
-    timestamp: str  # human-readable, e.g. "00:01:12"; kept as text for citations
+    timestamp: str  # relative to meeting start, e.g. "00:01:12"
     text: str
+    # Absolute wall-clock time (meeting_start + offset), set when the meeting's
+    # start datetime is known. This is what disambiguates turns across meetings.
+    occurred_at: str | None = None
 
 
 class Chunk(BaseModel):
@@ -30,14 +33,23 @@ class Chunk(BaseModel):
     timestamp: str
     text: str
     turn_index: int
+    occurred_at: str | None = None
+
+    def display_time(self) -> str:
+        """Absolute time when we have it (unambiguous across meetings), else the
+        relative transcript timestamp."""
+        return self.occurred_at or self.timestamp
 
     def metadata(self) -> dict[str, str | int]:
-        return {
+        meta: dict[str, str | int] = {
             "meeting_id": self.meeting_id,
             "speaker": self.speaker,
             "timestamp": self.timestamp,
             "turn_index": self.turn_index,
         }
+        if self.occurred_at:
+            meta["occurred_at"] = self.occurred_at
+        return meta
 
 
 class RetrievedChunk(BaseModel):
@@ -60,6 +72,10 @@ class ExtractedItem(BaseModel):
     timestamp: str
     turn_index: int
     text: str
+    occurred_at: str | None = None
+
+    def display_time(self) -> str:
+        return self.occurred_at or self.timestamp
 
 
 class MeetingBrief(BaseModel):
@@ -93,8 +109,9 @@ class HistoryTurn(BaseModel):
 
 
 class Citation(BaseModel):
+    meeting_id: str
     speaker: str
-    timestamp: str
+    timestamp: str  # absolute datetime when known, else relative to meeting start
     chunk_id: str
     quote: str
 

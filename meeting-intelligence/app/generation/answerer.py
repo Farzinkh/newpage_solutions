@@ -41,7 +41,9 @@ def _build_context(chunks: list[RetrievedChunk]) -> str:
     lines = []
     for i, rc in enumerate(chunks, start=1):
         c = rc.chunk
-        lines.append(f"[{i}] ({c.speaker} @ {c.timestamp}) {c.text}")
+        # Label the meeting and absolute time so the model can attribute and
+        # order turns correctly when excerpts span several meetings.
+        lines.append(f"[{i}] ({c.meeting_id} · {c.speaker} @ {c.display_time()}) {c.text}")
     return "\n".join(lines)
 
 
@@ -84,8 +86,9 @@ class Answerer:
         }
         citations = [
             Citation(
+                meeting_id=chunks[i - 1].chunk.meeting_id,
                 speaker=chunks[i - 1].chunk.speaker,
-                timestamp=chunks[i - 1].chunk.timestamp,
+                timestamp=chunks[i - 1].chunk.display_time(),
                 chunk_id=chunks[i - 1].chunk.id,
                 quote=chunks[i - 1].chunk.text,
             )

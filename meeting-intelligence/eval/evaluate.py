@@ -21,6 +21,7 @@ from pathlib import Path
 
 from app.config import Settings
 from app.factory import build_services
+from app.ingestion.timestamps import parse_filename
 
 ROOT = Path(__file__).resolve().parent.parent
 GOLD = Path(__file__).resolve().parent / "gold_set.json"
@@ -29,8 +30,9 @@ TRANSCRIPTS = ROOT / "data" / "transcripts"
 
 def _ingest_all(services) -> None:
     for path in sorted(TRANSCRIPTS.glob("*.txt")):
+        meeting_id, started_at = parse_filename(path.name)
         turns = services.file_transcriber.to_turns(path.read_text())
-        services.ingestion.ingest_turns(path.stem, turns)
+        services.ingestion.ingest_turns(meeting_id, turns, started_at)
 
 
 def evaluate() -> dict[str, float]:

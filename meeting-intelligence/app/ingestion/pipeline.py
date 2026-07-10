@@ -9,12 +9,14 @@ stable chunk ids produced by the chunker.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from app.config import Settings
 from app.ingestion.chunker import chunk_turns
 from app.ingestion.extractor import extract_items
 from app.ingestion.item_store import InMemoryItemStore
 from app.ingestion.redactor import preprocess
+from app.ingestion.timestamps import to_absolute
 from app.interfaces import Embedder, VectorStore
 from app.logging_config import log_event
 from app.models import MeetingBrief, Turn
@@ -35,7 +37,12 @@ class IngestionPipeline:
         self._store = store
         self._item_store = item_store
 
-    def ingest_turns(self, meeting_id: str, turns: list[Turn]) -> dict[str, object]:
+    def ingest_turns(
+        self,
+        meeting_id: str,
+        turns: list[Turn],
+        started_at: datetime | None = None,
+    ) -> dict[str, object]:
         redaction_totals: dict[str, int] = {}
         clean_turns: list[Turn] = []
         for turn in turns:
@@ -44,7 +51,14 @@ class IngestionPipeline:
                 continue
             for k, v in counts.items():
                 redaction_totals[k] = redaction_totals.get(k, 0) + v
-            clean_turns.append(turn.model_copy(update={"text": text}))
+            update: dict[str, object] = {"text": text}
+            # Anchor the turn to wall-clock time when we know when the meeting
+            # started, so citations are unambiguous across meetings.
+            if started_at is not None:
+                occurred = to_absolute(started_at, turn.timestamp)
+                if occurred:
+                    update["occurred_at"] = occurred
+            clean_turns.append(turn.model_copy(update=update))
 
         chunks = chunk_turns(meeting_id, clean_turns, self._settings.max_chunk_chars)
         if chunks:

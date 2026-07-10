@@ -65,6 +65,7 @@ def extract_items(meeting_id: str, turns: list[Turn]) -> list[ExtractedItem]:
                 timestamp=turn.timestamp,
                 turn_index=turn.index,
                 text=turn.text,
+                occurred_at=turn.occurred_at,
             )
         )
     return items

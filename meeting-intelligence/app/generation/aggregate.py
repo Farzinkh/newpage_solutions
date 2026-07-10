@@ -34,16 +34,20 @@ def detect_intent(question: str) -> str | None:
 
 def _citation(item: ExtractedItem) -> Citation:
     return Citation(
+        meeting_id=item.meeting_id,
         speaker=item.speaker,
-        timestamp=item.timestamp,
+        timestamp=item.display_time(),
         chunk_id=f"{item.meeting_id}:{item.turn_index}",
         quote=item.text,
     )
 
 
 def _bullets(items: list[ExtractedItem]) -> str:
+    # Label the meeting so a cross-meeting list ("all action items") stays
+    # attributable — the same timestamp recurs across meetings.
     return "\n".join(
-        f"- ({it.speaker} @ {it.timestamp}) {it.text}" for it in items
+        f"- ({it.meeting_id} · {it.speaker} @ {it.display_time()}) {it.text}"
+        for it in items
     )
 
 

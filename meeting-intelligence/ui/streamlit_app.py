@@ -17,6 +17,7 @@ retrieval "black box" is inspectable right in the UI, not just in the logs.
 from __future__ import annotations
 
 import os
+import re
 
 import requests
 import streamlit as st
@@ -31,13 +32,12 @@ if "history" not in st.session_state:
     st.session_state.history = []
 
 
-def ingest(meeting_id: str, text: str, source: str) -> None:
+def ingest(meeting_id: str, text: str, source: str, started_at: str | None = None) -> None:
     try:
-        res = requests.post(
-            f"{API}/ingest",
-            json={"meeting_id": meeting_id, "text": text, "source": source},
-            timeout=120,
-        )
+        payload = {"meeting_id": meeting_id, "text": text, "source": source}
+        if started_at:
+            payload["started_at"] = started_at
+        res = requests.post(f"{API}/ingest", json=payload, timeout=120)
         res.raise_for_status()
         data = res.json()
         redactions = data.get("redactions") or {}
@@ -63,8 +63,28 @@ with st.sidebar:
 
     with tab_file:
         uploaded = st.file_uploader("Transcript (.txt)", type=["txt"])
-        if uploaded and st.button("Ingest file"):
-            ingest(meeting_id, uploaded.read().decode("utf-8"), "file")
+        st.caption("Tip: name the file with a date/time — e.g. "
+                   "`standup_2026-06-03_1548.txt` — to anchor turns to wall-clock "
+                   "time (disambiguates citations across meetings).")
+        if uploaded:
+            # Derive the meeting start + a clean meeting_id from the file name.
+            from datetime import datetime as _dt  # local import: UI-only helper
+
+            started_at = None
+            try:
+                d = re.search(r"(\d{4})[-_]?(\d{2})[-_]?(\d{2})", uploaded.name)
+                if d:
+                    t = re.search(r"(?<!\d)(\d{2})[-:]?(\d{2})(?!\d)",
+                                  uploaded.name[d.end():])
+                    hh, mm = (int(t.group(1)), int(t.group(2))) if t else (0, 0)
+                    started_at = _dt(int(d.group(1)), int(d.group(2)), int(d.group(3)),
+                                     hh, mm).isoformat()
+            except (ValueError, AttributeError):
+                started_at = None
+            if started_at:
+                st.caption(f"Detected meeting start: {started_at}")
+            if st.button("Ingest file"):
+                ingest(meeting_id, uploaded.read().decode("utf-8"), "file", started_at)
 
     with tab_paste:
         pasted = st.text_area("Transcript text", height=200,
@@ -154,7 +174,11 @@ if question := st.chat_input("Ask about the meetings..."):
             if ans["citations"]:
                 with st.expander("Citations"):
                     for c in ans["citations"]:
-                        st.markdown(f"**{c['speaker']}** @ `{c['timestamp']}` — {c['quote']}")
+                        mid = c.get("meeting_id", "")
+                        tag = f"_{mid}_ · " if mid else ""
+                        st.markdown(
+                            f"{tag}**{c['speaker']}** @ `{c['timestamp']}` — {c['quote']}"
+                        )
 
             if ans["retrieved"]:
                 with st.expander("Retrieval detail (scores)"):

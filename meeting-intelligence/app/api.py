@@ -12,6 +12,7 @@ override them with a fake-backed instance.
 
 from __future__ import annotations
 
+from datetime import datetime
 from functools import lru_cache
 from typing import Literal
 
@@ -28,6 +29,9 @@ class IngestRequest(BaseModel):
     meeting_id: str = Field(min_length=1)
     text: str = Field(min_length=1)
     source: Literal["file", "voice"] = "file"
+    # Meeting start wall-clock time. When set, each turn's relative timestamp is
+    # anchored to an absolute datetime so citations disambiguate across meetings.
+    started_at: datetime | None = None
 
 
 class QueryRequest(BaseModel):
@@ -71,7 +75,7 @@ def ingest(req: IngestRequest, services: Services = Depends(get_services)) -> di
             detail="No speaker turns parsed. Expected '[HH:MM:SS] Speaker: text' "
             "or 'Speaker: text' lines.",
         )
-    return services.ingestion.ingest_turns(req.meeting_id, turns)
+    return services.ingestion.ingest_turns(req.meeting_id, turns, req.started_at)
 
 
 @app.post("/query")
