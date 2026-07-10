@@ -196,11 +196,17 @@ if question := (_clicked or st.chat_input("Ask about the meetings...")):
             if ans["retrieved"]:
                 with st.expander("Retrieval detail (scores)"):
                     for i, rc in enumerate(ans["retrieved"], start=1):
+                        chunk = rc["chunk"]
                         rr = rc["rerank_score"]
                         rr_txt = f", rerank {rr:.3f}" if rr is not None else ""
+                        # Prefer the absolute datetime; fall back to the relative
+                        # timestamp only when the meeting had no known start.
+                        ts = chunk.get("occurred_at") or chunk["timestamp"]
+                        mid = chunk.get("meeting_id", "")
+                        tag = f"{mid} · " if mid else ""
                         st.markdown(
                             f"[{i}] sim {rc['similarity']:.3f}{rr_txt} — "
-                            f"*{rc['chunk']['speaker']} @ {rc['chunk']['timestamp']}*: "
-                            f"{rc['chunk']['text'][:160]}"
+                            f"*{tag}{chunk['speaker']} @ {ts}*: "
+                            f"{chunk['text'][:160]}"
                         )
             st.session_state.history.append({"role": "assistant", "content": ans["text"]})
