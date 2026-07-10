@@ -28,28 +28,63 @@ _ARTIFACTS = [
     re.compile(r"\b(?:um+|uh+|erm+|hmm+)\b", re.IGNORECASE),
 ]
 
+# Each pattern ends on a digit (not an optional separator) so a redaction never
+# swallows the following space and glues words together ("[CARD]shipped").
 _PII = {
     "EMAIL": re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b"),
     "SSN": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
-    "CREDIT_CARD": re.compile(r"\b(?:\d[ -]?){13,16}\b"),
+    "CREDIT_CARD": re.compile(r"\b\d(?:[ -]?\d){12,15}\b"),
     "PHONE": re.compile(r"\b(?:\+?\d{1,2}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}\b"),
 }
+
+
+def _luhn_ok(digits: str) -> bool:
+    """Luhn checksum. Gates CREDIT_CARD so arbitrary 13–16 digit numbers
+    (order ids, metrics) aren't redacted as cards — only plausible ones are."""
+    total, parity = 0, len(digits) % 2
+    for i, ch in enumerate(digits):
+        d = int(ch)
+        if i % 2 == parity:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+    return total % 10 == 0
 
 
 def clean_text(text: str) -> str:
     for pat in _ARTIFACTS:
         text = pat.sub(" ", text)
-    return re.sub(r"\s{2,}", " ", text).strip()
+    text = re.sub(r"\s{2,}", " ", text)
+    # Reattach punctuation the filler removal orphaned (" , " / " ." -> ", ").
+    text = re.sub(r"\s+([,.!?;:])", r"\1", text)
+    # Drop a leading orphan comma/semicolon left when a turn opened with a filler.
+    text = re.sub(r"^[\s,;]+", "", text)
+    return text.strip()
+
+
+def _redact_card(text: str, counts: dict[str, int]) -> str:
+    def repl(m: re.Match[str]) -> str:
+        if _luhn_ok(re.sub(r"\D", "", m.group())):
+            counts["CREDIT_CARD"] = counts.get("CREDIT_CARD", 0) + 1
+            return "[CREDIT_CARD]"
+        return m.group()
+
+    return _PII["CREDIT_CARD"].sub(repl, text)
 
 
 def redact_pii(text: str) -> tuple[str, dict[str, int]]:
     """Return (redacted_text, counts_by_type). Order matters: card/SSN before
     phone so a 16-digit card isn't partially matched as a phone number."""
     counts: dict[str, int] = {}
-    for label in ("EMAIL", "SSN", "CREDIT_CARD", "PHONE"):
+    for label in ("EMAIL", "SSN"):
         text, n = _PII[label].subn(f"[{label}]", text)
         if n:
             counts[label] = counts.get(label, 0) + n
+    text = _redact_card(text, counts)
+    text, n = _PII["PHONE"].subn("[PHONE]", text)
+    if n:
+        counts["PHONE"] = counts.get("PHONE", 0) + n
     return text, counts
 
 

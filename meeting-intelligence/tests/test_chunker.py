@@ -28,3 +28,13 @@ def test_long_turn_is_split_on_sentences():
     chunks = chunk_turns("m1", [long], max_chunk_chars=100)
     assert len(chunks) > 1
     assert all(len(c.text) <= 120 for c in chunks)  # small overshoot tolerance
+
+
+def test_single_over_long_sentence_is_hard_wrapped():
+    # One unpunctuated monologue must not become a single oversized chunk that
+    # silently overruns the embedding model's token window.
+    monologue = Turn(index=0, speaker="A", timestamp="00:00:01",
+                     text="word " * 300)  # ~1500 chars, no sentence breaks
+    chunks = chunk_turns("m1", [monologue], max_chunk_chars=200)
+    assert len(chunks) > 1
+    assert all(len(c.text) <= 200 for c in chunks)

@@ -40,9 +40,16 @@ Docker: `docker compose up --build` starts the API (`:8000`) and UI (`:8501`).
 
 ## What it does
 
-- **Ingests** transcripts (`[HH:MM:SS] Speaker: text`) or browser voice input.
+- **Ingests** transcripts (`[HH:MM:SS] Speaker: text`, or plain `Speaker: text`)
+  or browser voice input.
 - **Redacts** leaked PII (emails, phones, SSNs, card numbers) before storage.
-- **Retrieves** relevant turns and **generates** an answer that cites its sources.
+- **Extracts** decisions and action items at ingestion, so "list the action
+  items" / "summarise the meeting" are answered by enumeration, not top-k search.
+- **Retrieves** relevant turns and **generates** an answer that cites its sources,
+  with the **whole-meeting brief** (participants, decisions, action items)
+  injected as context so answers aren't limited to isolated fragments.
+- **Is conversational**: prior turns are fed back and follow-ups ("who owns
+  that?") are rewritten to standalone queries before retrieval.
 - **Refuses to hallucinate**: if the transcript doesn't cover it, it says so.
 - **Shows its work**: every answer carries the retrieved chunks and their scores.
 
@@ -81,11 +88,12 @@ app/
   config.py         # all knobs (pydantic-settings), env-overridable
   factory.py        # the ONLY place that picks concrete implementations
   models.py         # Turn / Chunk / RetrievedChunk / Citation / Answer
-  ingestion/        # parser, redactor, chunker, pipeline (idempotent)
+                    #   ExtractedItem / MeetingBrief / HistoryTurn
+  ingestion/        # parser, redactor, chunker, extractor, item_store, pipeline
   transcription/    # file + voice -> Turns
   retrieval/        # embedder, vector_store, reranker, retriever
-  generation/       # llm clients, answerer (prompt + citation guardrail)
-  api.py            # FastAPI transport
+  generation/       # llm clients, answerer, conversation (rewrite), aggregate
+  api.py            # FastAPI transport (ingest/query/items/brief/meetings)
 ui/                 # Streamlit client (talks to the API, never imports core)
 eval/               # gold set + retrieval metrics (hit-rate@k, MRR)
 tests/              # unit + integration, all runnable with zero keys
@@ -120,14 +128,26 @@ fits "start simple." The production upgrade path is pgvector or Qdrant once
 corpus size and concurrency grow — that's a new `VectorStore` implementation, not
 a rewrite.
 
-**Retrieval — wide net, then rerank.** The embedder is a *bi-encoder*: it encodes
-the query and each chunk separately, so it never compares them directly and misses
-fine-grained relevance. So the pattern is: retrieve top-N (=20) cheaply by cosine
-similarity, then rerank with **Cohere Rerank** (a *cross-encoder* that scores each
-query–chunk pair jointly) down to the top-k (=4) the LLM sees. The cost of that
-quality is an external API dependency and per-query latency, so reranking is
-behind a flag (`RERANKER_BACKEND`) and defaults off. Both similarity and rerank
-scores are logged and shown in the UI.
+**Retrieval — wide net, then (optional) rerank, and a measurement that changed my
+mind.** The embedder is a *bi-encoder*: it encodes the query and each chunk
+separately, so it never compares them directly and misses fine-grained relevance.
+The textbook fix is retrieve top-N (=20) cheaply by cosine similarity, then rerank
+with a *cross-encoder* (scores each query–chunk pair jointly) down to the top-k
+(=4) the LLM sees. I wired **two** rerankers — a keyless local cross-encoder
+(`ms-marco-MiniLM`) and hosted **Cohere Rerank** — intending to turn reranking on
+by default.
+
+Then I ran the eval, and it *overruled the intuition*: on this corpus the local
+cross-encoder made retrieval **worse** (hit-rate@4 1.0 → 0.875, MRR 0.635 →
+0.521 — it demoted the correct chunk for one query below rank 4). The small
+MS-MARCO model is trained on web-passage ranking; short conversational meeting
+turns are out of its distribution, and the multilingual bi-encoder already nails
+top-4 recall here. So the honest call is: reranking stays **wired, tested, and
+behind a flag** (`RERANKER_BACKEND`), but **off by default**, because the numbers
+say it doesn't help *this* data. This is exactly what the eval harness is for —
+turning a plausible default into a measured one. I'd revisit it with a larger,
+domain-tuned reranker and a bigger eval set. Both scores are logged and shown in
+the UI.
 
 **Orchestration — no framework.** I wrote the ~150 lines of RAG glue directly
 rather than pulling in LangChain/LlamaIndex. At this scope a framework's
@@ -136,11 +156,41 @@ for a reviewer to read and for me to reason about. The interfaces give me the
 composability a framework would, without the indirection. (For a much larger
 system with many loaders and tools, that calculus flips.)
 
-**Prompt & context management.** The LLM gets a numbered list of retrieved
-excerpts, each prefixed with `[n] (speaker @ timestamp)`, and a system prompt
-that says: answer only from these excerpts, cite as `[n]`, and if the answer
-isn't there, say exactly "Not discussed in the transcript." `temperature=0` for
-determinism.
+**Beyond top-k — the three things that make it a *meeting* assistant, not a
+generic RAG box.** Plain chunk retrieval has three failure modes that matter a
+lot for meetings specifically, and each has its own mechanism:
+
+1. **Aggregation queries are extraction, not retrieval.** "What are all the
+   action items?" needs *every* relevant turn; top-k returns a handful (the eval
+   shows a 3-turn action-item answer retrieving 1 of 3). So a deterministic,
+   keyless pass at ingestion tags decisions and action items (high-precision cue
+   phrases — I tuned these toward precision, dropping broad cues like bare
+   "let's" that tagged "let's wrap" as a to-do). An intent detector routes
+   enumerations/summaries to answer from those records, so the list is *complete*
+   and every line is cited. The documented upgrade is an LLM extraction pass
+   behind the same `ExtractedItem` seam.
+
+2. **Isolated chunks lose the meeting's narrative.** A turn retrieved on its own
+   doesn't know the meeting decided single-device-only or that Daniel owns the
+   doc. So at ingestion I derive a **meeting brief** — participants, decisions,
+   action items — and inject it as clearly-marked, *non-citable* background ahead
+   of the numbered excerpts. The model answers with the whole-meeting shape *and*
+   the specific retrieved turns, instead of just the fragments. (Same `/brief` is
+   exposed in the API and UI so it's inspectable.)
+
+3. **A one-shot Q&A box isn't "conversational."** The brief asks for a
+   *conversational* system, so `/query` takes prior turns. A follow-up like "who
+   owns that?" is first **rewritten to a standalone question** (using a real LLM;
+   for the keyless EchoLLM it degrades to carrying the previous question's terms)
+   so retrieval has the referent, and the recent turns are also passed to the
+   answer prompt to resolve references. Capped at `MAX_HISTORY_TURNS`.
+
+**Prompt & context management.** The LLM gets, in order: the recent conversation
+(if any), the non-citable meeting brief (if scoped to a meeting), then a numbered
+list of retrieved excerpts each prefixed with `[n] (speaker @ timestamp)`, and a
+system prompt that says: answer only from the numbered excerpts, cite as `[n]`,
+never cite the brief or history, and if the answer isn't there say exactly "Not
+discussed in the transcript." `temperature=0` for determinism.
 
 **Guardrails — two layers.** (1) The grounding prompt above. (2) An *output*
 check: I parse the `[n]` citations the model emits, drop any that point outside
@@ -166,9 +216,12 @@ each answer. Only redaction *counts* are logged, never raw PII values.
 **Quality — a real eval harness.** `eval/gold_set.json` maps hand-curated
 questions to the turns that answer them; `eval/evaluate.py` computes hit-rate@k
 and MRR. This is what makes every knob (k, rerank on/off, embedding model) a
-*measured* decision instead of a vibe. Run it before and after a change and
-compare. (With the fake embedder the numbers are only a plumbing check — point it
-at the local or hosted embedder for meaningful scores.)
+*measured* decision instead of a vibe. On the local embedder the current numbers
+are **hit-rate@4 = 1.0, MRR = 0.635** (8 cases); this is what let me catch that
+turning on the local reranker *lowered* MRR to 0.521 and back the default out.
+Run it before and after a change and compare. (With the fake embedder the numbers
+are only a plumbing check — point it at the local or hosted embedder for
+meaningful scores.)
 
 ---
 
@@ -252,17 +305,23 @@ line by line. This README is written by me about my own decisions.
 
 ## What I'd do differently / add next
 
-In rough priority order:
-1. **Turn on reranking by default** and re-run the eval to quantify the lift —
-   right now it's wired but off.
-2. **Add hybrid retrieval** (dense + BM25). Meetings are full of exact terms
+Some of the original "next" list is now **done** — action-item/decision
+extraction, conversational memory, the whole-meeting brief, and the reranker
+(wired + measured, then left off because the eval said so). What I'd tackle next,
+in rough priority order:
+
+1. **Add hybrid retrieval** (dense + BM25). Meetings are full of exact terms
    (names, dates, project codenames, dollar figures) that keyword search nails
-   and pure semantic search sometimes fuzzes. For this corpus I'd expect this to
-   help more than reranking.
-3. **Action-item / decision extraction** as a structured pass at ingestion, so
-   "list the action items" is answered from extracted records rather than
-   similarity search — those queries are extraction, not retrieval.
-4. **Presidio** as the default redactor for names-in-context.
-5. **Streaming responses** and answer caching.
-6. **Server-side diarised transcription** backend behind the `Transcriber` seam.
-7. **Grow the eval set** and gate CI on retrieval-metric regressions.
+   and pure semantic search sometimes fuzzes. Given the reranker result above,
+   this is now my top retrieval-quality bet for this corpus.
+2. **LLM-based extraction** behind the existing `ExtractedItem` seam, replacing
+   the cue-phrase baseline for recall on phrasings the regex misses — and
+   extend the brief with an LLM narrative summary at ingestion.
+3. **Grow the eval set** (it's 8 hand-made cases) and add an *answer*-quality
+   metric (faithfulness/citation-correctness), not just retrieval hit-rate/MRR;
+   gate CI on regressions. Also add an eval case type for aggregation recall.
+4. **A domain-tuned / larger reranker** and re-measure — the mechanism is right
+   even if the small model wasn't.
+5. **Presidio** as the default redactor for names-in-context.
+6. **Streaming responses** and answer caching.
+7. **Server-side diarised transcription** backend behind the `Transcriber` seam.

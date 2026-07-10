@@ -67,5 +67,11 @@ class Reranker(ABC):
 
 
 class LLMClient(ABC):
+    # Whether this client can perform free-form generation (query rewriting,
+    # abstractive answers). The extractive EchoLLM used by the keyless demo
+    # cannot, so features that need real generation degrade gracefully instead
+    # of feeding it prompts it would mangle.
+    can_generate: bool = True
+
     @abstractmethod
     def complete(self, system: str, user: str) -> str: ...

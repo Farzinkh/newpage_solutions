@@ -17,9 +17,10 @@ from __future__ import annotations
 import logging
 import re
 
+from app.generation.conversation import format_history
 from app.generation.llm import LLMClient
 from app.logging_config import log_event, timed
-from app.models import Answer, Citation, RetrievedChunk
+from app.models import Answer, Citation, HistoryTurn, RetrievedChunk
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,8 @@ SYSTEM_PROMPT = (
     "ONLY the numbered transcript excerpts provided. Every claim must cite its "
     "source as [n] using the excerpt number. If the excerpts do not contain the "
     "answer, reply exactly: 'Not discussed in the transcript.' Do not use outside "
-    "knowledge and do not invent speakers, dates, or figures."
+    "knowledge and do not invent speakers, dates, or figures. The conversation so "
+    "far is provided only to resolve references in the question; never cite it."
 )
 
 _CITE = re.compile(r"\[(\d+)\]")
@@ -48,13 +50,27 @@ class Answerer:
         self._llm = llm
 
     def answer(
-        self, question: str, chunks: list[RetrievedChunk], timings: dict[str, float]
+        self,
+        question: str,
+        chunks: list[RetrievedChunk],
+        timings: dict[str, float],
+        history: list[HistoryTurn] | None = None,
+        brief: str | None = None,
     ) -> Answer:
         if not chunks:
             return Answer(text="Not discussed in the transcript.", grounded=False)
 
         context = _build_context(chunks)
-        user = f"Transcript excerpts:\n{context}\n\nQuestion: {question}"
+        convo = f"Conversation so far:\n{format_history(history)}\n\n" if history else ""
+        # Whole-meeting brief as orientation, clearly marked as non-citable so
+        # the model grounds specific claims in the numbered excerpts, not here.
+        overview = (
+            f"Meeting overview (background for context — do NOT cite this, cite the "
+            f"numbered excerpts):\n{brief}\n\n" if brief else ""
+        )
+        user = (
+            f"{convo}{overview}Transcript excerpts:\n{context}\n\nQuestion: {question}"
+        )
 
         with timed(timings, "llm_ms"):
             raw = self._llm.complete(SYSTEM_PROMPT, user).strip()

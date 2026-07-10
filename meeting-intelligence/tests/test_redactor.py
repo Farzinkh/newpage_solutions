@@ -34,3 +34,23 @@ def test_preprocess_can_disable_redaction():
     text = "call 415-555-0142"
     out, counts = preprocess(text, redact=False)
     assert "415-555-0142" in out and counts == {}
+
+
+def test_redaction_does_not_glue_adjacent_words():
+    # A real Visa test number (passes Luhn) followed by a word.
+    text = "The card 4111 1111 1111 1111 was declined."
+    out, counts = redact_pii(text)
+    assert "[CREDIT_CARD] was declined" in out  # trailing space preserved
+    assert counts["CREDIT_CARD"] == 1
+
+
+def test_non_card_digit_runs_are_not_redacted():
+    # An order id that fails the Luhn check is not a card; leave it intact.
+    text = "Order number 12345678901234 shipped."
+    out, counts = redact_pii(text)
+    assert "12345678901234" in out
+    assert "CREDIT_CARD" not in counts
+
+
+def test_filler_removal_leaves_no_orphan_punctuation():
+    assert clean_text("Um, I think we should ship it.") == "I think we should ship it."

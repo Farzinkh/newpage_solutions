@@ -9,6 +9,7 @@ TRANSCRIPT = (
     "[00:00:04] Priya: We commit offline mode for Q3, single device only.\n"
     "[00:00:19] Daniel: Root cause of the outage was a low connection pool limit.\n"
     "[00:00:33] Maya: Reach me at maya@example.com if needed.\n"
+    "[00:00:48] Daniel: I'll write the design doc by Friday.\n"
 )
 
 
@@ -77,5 +78,38 @@ def test_api_query_returns_grounded_answer_with_citations():
         assert body["grounded"] is True
         assert len(body["citations"]) >= 1
         assert body["citations"][0]["timestamp"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def _client_with(services):
+    app.dependency_overrides[get_services] = lambda: services
+    return TestClient(app)
+
+
+def test_empty_ingest_is_rejected(services):
+    client = _client_with(services)
+    try:
+        r = client.post("/ingest", json={"meeting_id": "x", "text": "no speakers here"})
+        assert r.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_aggregation_query_answers_from_items(services):
+    turns = services.file_transcriber.to_turns(TRANSCRIPT)
+    services.ingestion.ingest_turns("m1", turns)
+    client = _client_with(services)
+    try:
+        r = client.post("/query", json={"question": "list the action items",
+                                        "meeting_id": "m1"})
+        body = r.json()
+        assert r.status_code == 200
+        assert body["grounded"] is True
+        assert "design doc" in body["text"]
+
+        items = client.get("/items", params={"meeting_id": "m1",
+                                             "kind": "action_item"}).json()["items"]
+        assert any("design doc" in it["text"] for it in items)
     finally:
         app.dependency_overrides.clear()

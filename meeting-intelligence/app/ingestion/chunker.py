@@ -25,12 +25,34 @@ def _chunk_id(meeting_id: str, turn_index: int, part: int, text: str) -> str:
     return h[:16]
 
 
+def _hard_wrap(text: str, limit: int) -> list[str]:
+    """Last-resort split for a single sentence longer than the limit — wrap on
+    word boundaries so one unpunctuated monologue can't exceed the embedding
+    model's token window and get silently truncated."""
+    parts, current = [], ""
+    for word in text.split():
+        if current and len(current) + len(word) + 1 > limit:
+            parts.append(current)
+            current = word
+        else:
+            current = f"{current} {word}".strip()
+    if current:
+        parts.append(current)
+    return parts
+
+
 def _split_long(text: str, limit: int) -> list[str]:
     if len(text) <= limit:
         return [text]
     parts, current = [], ""
     for sentence in _SENTENCE.split(text):
-        if current and len(current) + len(sentence) + 1 > limit:
+        if len(sentence) > limit:
+            # A single over-long sentence: flush what we have, then hard-wrap it.
+            if current:
+                parts.append(current.strip())
+                current = ""
+            parts.extend(_hard_wrap(sentence, limit))
+        elif current and len(current) + len(sentence) + 1 > limit:
             parts.append(current.strip())
             current = sentence
         else:

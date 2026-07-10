@@ -23,3 +23,21 @@ def test_leading_preamble_dropped():
     turns = parse_transcript(raw)
     assert len(turns) == 1
     assert turns[0].speaker == "Priya"
+
+
+def test_untimed_format_falls_back():
+    # A transcript with speaker labels but no timestamps must not silently
+    # produce zero turns.
+    raw = "Alice: Let's ship it.\nBob: Agreed, next week."
+    turns = parse_transcript(raw)
+    assert [t.speaker for t in turns] == ["Alice", "Bob"]
+    assert turns[0].timestamp  # synthesised, non-empty
+
+
+def test_untimed_fallback_does_not_hijack_timestamped_continuations():
+    # A colon inside a continuation of a timestamped turn must stay part of that
+    # turn, not be read as a new speaker.
+    raw = "[00:00:04] Priya: Here's the plan.\nNote: ship on Friday."
+    turns = parse_transcript(raw)
+    assert len(turns) == 1
+    assert "Note: ship on Friday." in turns[0].text

@@ -15,13 +15,13 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from app.config import get_settings
 from app.factory import Services, build_services
 from app.logging_config import configure_logging
-from app.models import Answer
+from app.models import Answer, ExtractedItem, HistoryTurn, MeetingBrief
 
 
 class IngestRequest(BaseModel):
@@ -33,6 +33,8 @@ class IngestRequest(BaseModel):
 class QueryRequest(BaseModel):
     question: str = Field(min_length=1)
     meeting_id: str | None = None
+    # Prior turns for follow-up resolution; optional so single-shot still works.
+    history: list[HistoryTurn] = Field(default_factory=list)
 
 
 @lru_cache
@@ -61,9 +63,36 @@ def ingest(req: IngestRequest, services: Services = Depends(get_services)) -> di
         services.voice_transcriber if req.source == "voice" else services.file_transcriber
     )
     turns = transcriber.to_turns(req.text)
+    if not turns:
+        # Fail loudly rather than silently ingesting nothing — the usual cause is
+        # a transcript whose format we don't recognise (no speaker labels).
+        raise HTTPException(
+            status_code=422,
+            detail="No speaker turns parsed. Expected '[HH:MM:SS] Speaker: text' "
+            "or 'Speaker: text' lines.",
+        )
     return services.ingestion.ingest_turns(req.meeting_id, turns)
 
 
 @app.post("/query")
 def query(req: QueryRequest, services: Services = Depends(get_services)) -> Answer:
-    return services.query(req.question, req.meeting_id)
+    return services.query(req.question, req.meeting_id, req.history)
+
+
+@app.get("/items")
+def items(
+    meeting_id: str | None = None,
+    kind: Literal["action_item", "decision"] | None = None,
+    services: Services = Depends(get_services),
+) -> dict[str, list[ExtractedItem]]:
+    return {"items": services.item_store.list(meeting_id, kind)}
+
+
+@app.get("/brief")
+def brief(
+    meeting_id: str, services: Services = Depends(get_services)
+) -> MeetingBrief:
+    b = services.item_store.get_brief(meeting_id)
+    if b is None:
+        raise HTTPException(status_code=404, detail=f"No brief for meeting '{meeting_id}'")
+    return b

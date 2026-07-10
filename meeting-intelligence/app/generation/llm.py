@@ -16,6 +16,8 @@ from app.interfaces import LLMClient
 
 
 class EchoLLM(LLMClient):
+    can_generate = False  # extractive only — no rewriting, no abstractive text
+
     def complete(self, system: str, user: str) -> str:
         # Pull the first "[n] ..." context block out of the user prompt and
         # echo it back with a citation, mimicking a grounded extractive answer.

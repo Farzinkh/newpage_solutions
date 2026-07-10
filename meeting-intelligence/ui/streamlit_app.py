@@ -42,9 +42,17 @@ def ingest(meeting_id: str, text: str, source: str) -> None:
         data = res.json()
         redactions = data.get("redactions") or {}
         note = f" · redacted {sum(redactions.values())} PII item(s)" if redactions else ""
-        st.success(f"Ingested '{meeting_id}': {data['chunks']} chunks{note}")
+        items = data.get("items")
+        items_note = f" · {items} decision/action item(s)" if items else ""
+        st.success(f"Ingested '{meeting_id}': {data['chunks']} chunks{items_note}{note}")
     except requests.RequestException as e:
-        st.error(f"Ingestion failed: {e}")
+        # FastAPI validation (e.g. unrecognised transcript format) returns 422.
+        detail = ""
+        try:
+            detail = f" — {res.json().get('detail', '')}"
+        except Exception:
+            pass
+        st.error(f"Ingestion failed: {e}{detail}")
 
 
 with st.sidebar:
@@ -87,10 +95,27 @@ with st.sidebar:
         st.warning("Backend not reachable.")
         meetings = []
 
-scope = st.selectbox("Search scope", ["All meetings", *[]], index=0) if False else None
 selected_meeting = st.selectbox(
     "Restrict to meeting (optional)", ["All", *(meetings if "meetings" in dir() else [])]
 )
+
+# Whole-meeting brief (highlights) for the selected meeting — this is the same
+# context injected into the model at query time, surfaced so it's inspectable.
+if selected_meeting and selected_meeting != "All":
+    try:
+        b = requests.get(f"{API}/brief", params={"meeting_id": selected_meeting}, timeout=10)
+        if b.ok:
+            brief = b.json()
+            with st.expander(f"📌 Meeting brief — {selected_meeting}", expanded=False):
+                st.markdown("**Participants:** " + (", ".join(brief["participants"]) or "—"))
+                st.markdown("**Decisions**")
+                for d in brief["decisions"] or ["—"]:
+                    st.markdown(f"- {d}")
+                st.markdown("**Action items**")
+                for a in brief["action_items"] or ["—"]:
+                    st.markdown(f"- {a}")
+    except requests.RequestException:
+        pass
 
 for turn in st.session_state.history:
     with st.chat_message(turn["role"]):
@@ -102,7 +127,15 @@ if question := st.chat_input("Ask about the meetings..."):
         st.markdown(question)
 
     with st.chat_message("assistant"):
-        payload = {"question": question}
+        # Send prior turns so follow-ups ("who owns that?") resolve. Exclude the
+        # question we just appended; the backend caps how many it actually uses.
+        payload = {
+            "question": question,
+            "history": [
+                {"role": t["role"], "content": t["content"]}
+                for t in st.session_state.history[:-1]
+            ],
+        }
         if selected_meeting and selected_meeting != "All":
             payload["meeting_id"] = selected_meeting
         try:

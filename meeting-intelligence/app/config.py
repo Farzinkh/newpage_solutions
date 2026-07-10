@@ -27,7 +27,12 @@ class Settings(BaseSettings):
     # --- Seam selection -----------------------------------------------------
     embedder_backend: Literal["local", "fake"] = "local"
     vector_store_backend: Literal["chroma", "memory"] = "chroma"
-    reranker_backend: Literal["cohere", "noop"] = "noop"
+    # `local` is a keyless cross-encoder (no API key needed), `cohere` the hosted
+    # upgrade, `noop` keeps raw vector order. Default is `noop`: I wired the local
+    # reranker specifically to turn it on by default — but the eval harness showed
+    # it *hurt* on this corpus (MRR 0.635 -> 0.521), so the measurement overruled
+    # the intuition. It stays available and tested behind the flag. See README.
+    reranker_backend: Literal["local", "cohere", "noop"] = "noop"
     llm_backend: Literal["openai", "anthropic", "echo"] = "echo"
 
     # --- Embedding ----------------------------------------------------------
@@ -41,6 +46,8 @@ class Settings(BaseSettings):
     collection_name: str = "meeting_turns"
 
     # --- Reranker -----------------------------------------------------------
+    # Local cross-encoder: keyless, ~90MB, downloaded once then cached offline.
+    cross_encoder_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     cohere_api_key: str | None = None
     cohere_rerank_model: str = "rerank-english-v3.0"
 
@@ -57,6 +64,15 @@ class Settings(BaseSettings):
     # --- Ingestion ----------------------------------------------------------
     max_chunk_chars: int = 1200  # split turns longer than this on sentences
     redaction_enabled: bool = True
+    # Deterministic, keyless tagging of decisions/action-items at ingestion so
+    # aggregation queries ("list the action items") are answered from extracted
+    # records instead of top-k similarity search.
+    extraction_enabled: bool = True
+
+    # --- Conversation -------------------------------------------------------
+    # How many prior (user, assistant) turns to feed back into the prompt so
+    # follow-up questions ("who owns that?") have context. 0 disables memory.
+    max_history_turns: int = 6
 
 
 @lru_cache

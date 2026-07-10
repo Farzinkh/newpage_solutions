@@ -49,6 +49,49 @@ class RetrievedChunk(BaseModel):
     rerank_score: float | None = None
 
 
+class ExtractedItem(BaseModel):
+    """A decision or action item pulled out at ingestion by the deterministic
+    extractor, so aggregation queries ("list the action items") are answered
+    from structured records instead of top-k similarity search."""
+
+    meeting_id: str
+    kind: str  # "action_item" | "decision"
+    speaker: str
+    timestamp: str
+    turn_index: int
+    text: str
+
+
+class MeetingBrief(BaseModel):
+    """Meeting-level highlights derived once at ingestion. Injected as background
+    at query time so an answer sees the whole meeting's shape (participants, what
+    was decided, who owns what), not just the isolated top-k retrieved turns —
+    the classic local-vs-global gap in chunk retrieval."""
+
+    meeting_id: str
+    participants: list[str] = Field(default_factory=list)
+    decisions: list[str] = Field(default_factory=list)
+    action_items: list[str] = Field(default_factory=list)
+
+    def render(self, max_items: int = 6, max_chars: int = 200) -> str:
+        def _lines(items: list[str]) -> str:
+            return "\n".join(f"  - {t[:max_chars]}" for t in items[:max_items]) or "  - (none)"
+
+        return (
+            f"Participants: {', '.join(self.participants) or '(unknown)'}\n"
+            f"Decisions:\n{_lines(self.decisions)}\n"
+            f"Action items:\n{_lines(self.action_items)}"
+        )
+
+
+class HistoryTurn(BaseModel):
+    """One prior message in the conversation, fed back so follow-up questions
+    ("who owns that?") resolve against what was already said."""
+
+    role: str  # "user" | "assistant"
+    content: str
+
+
 class Citation(BaseModel):
     speaker: str
     timestamp: str
