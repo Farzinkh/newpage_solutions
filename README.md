@@ -11,6 +11,13 @@ This is **Option 3** (Meeting Intelligence) of the assignment. The code lives in
 
 ---
 
+## 📹 Demo video
+
+A short walkthrough of the app:
+**[Watch the demo on Loom](https://www.loom.com/share/da7084cd4c67456dba89bd2534fe99d2)**
+
+---
+
 ## Quick start (Docker)
 
 The zero-key demo runs with fake backends (fake embedder, in-memory store, echo
