@@ -168,9 +168,10 @@ for turn in st.session_state.history:
     with st.chat_message(turn["role"]):
         st.markdown(turn["content"])
 
-# st.chat_input is pinned to the bottom of the page (proper chat UX). A clicked
-# quick-prompt takes precedence on the run it's pressed.
-question = _clicked or st.chat_input("Ask about the meetings…")
+# Always render st.chat_input so the box stays pinned to the bottom on every run
+# (including the run a quick-prompt is clicked — don't let `or` short-circuit it).
+typed = st.chat_input("Ask about the meetings…")
+question = _clicked or typed
 if question:
     st.session_state.history.append({"role": "user", "content": question})
     with st.chat_message("user"):
