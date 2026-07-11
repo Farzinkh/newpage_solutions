@@ -151,16 +151,7 @@ if selected_meeting and selected_meeting != "All":
     except requests.RequestException:
         pass
 
-st.subheader("Ask a question")
-with st.form("ask_form", clear_on_submit=True):
-    typed = st.text_input(
-        "Your question",
-        placeholder="Type your question, e.g. What was the root cause of the outage?",
-        label_visibility="collapsed",
-    )
-    submitted = st.form_submit_button("Ask", type="primary")
-
-st.caption("…or click an example:")
+st.markdown("**Quick prompts** — or type your own in the chat box at the bottom:")
 EXAMPLES = [
     "List all the action items across every meeting",
     "What was the root cause of the payment outage?",
@@ -173,12 +164,13 @@ for _i, _ex in enumerate(EXAMPLES):
     if _cols[_i % 2].button(_ex, key=f"ex_{_i}", use_container_width=True):
         _clicked = _ex
 
-question = _clicked or (typed.strip() if submitted and typed.strip() else None)
-
 for turn in st.session_state.history:
     with st.chat_message(turn["role"]):
         st.markdown(turn["content"])
 
+# st.chat_input is pinned to the bottom of the page (proper chat UX). A clicked
+# quick-prompt takes precedence on the run it's pressed.
+question = _clicked or st.chat_input("Ask about the meetings…")
 if question:
     st.session_state.history.append({"role": "user", "content": question})
     with st.chat_message("user"):
