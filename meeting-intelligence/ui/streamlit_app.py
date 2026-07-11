@@ -25,6 +25,20 @@ import streamlit as st
 API = os.environ.get("API_URL", "http://localhost:8000")
 
 st.set_page_config(page_title="Meeting Intelligence", page_icon="🗣️", layout="wide")
+
+# Hide the Streamlit chrome we don't want in a demo: the "Deploy" button and the
+# top-right menu (its "Record a screencast" item needs browser support and often
+# does nothing, which is confusing).
+st.markdown(
+    """
+    <style>
+      [data-testid="stAppDeployButton"] {display: none;}
+      #MainMenu {visibility: hidden;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.title("Meeting intelligence")
 st.caption("Ask questions about your meetings — answers are grounded and cited.")
 
@@ -137,7 +151,16 @@ if selected_meeting and selected_meeting != "All":
     except requests.RequestException:
         pass
 
-st.markdown("**Try an example** — click to ask:")
+st.subheader("Ask a question")
+with st.form("ask_form", clear_on_submit=True):
+    typed = st.text_input(
+        "Your question",
+        placeholder="Type your question, e.g. What was the root cause of the outage?",
+        label_visibility="collapsed",
+    )
+    submitted = st.form_submit_button("Ask", type="primary")
+
+st.caption("…or click an example:")
 EXAMPLES = [
     "List all the action items across every meeting",
     "What was the root cause of the payment outage?",
@@ -150,11 +173,13 @@ for _i, _ex in enumerate(EXAMPLES):
     if _cols[_i % 2].button(_ex, key=f"ex_{_i}", use_container_width=True):
         _clicked = _ex
 
+question = _clicked or (typed.strip() if submitted and typed.strip() else None)
+
 for turn in st.session_state.history:
     with st.chat_message(turn["role"]):
         st.markdown(turn["content"])
 
-if question := (_clicked or st.chat_input("Ask about the meetings...")):
+if question:
     st.session_state.history.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)
