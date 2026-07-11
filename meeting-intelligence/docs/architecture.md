@@ -17,7 +17,7 @@ store and the item/brief store.
 
 ```mermaid
 flowchart LR
-    subgraph ingest["Ingestion — once per transcript"]
+    subgraph ingest["Ingestion (once per transcript)"]
         direction TB
         T[Transcript / voice] --> P[Parse turns] --> C[Clean + redact PII]
         C --> TS["Stamp absolute time<br/>(meeting_start + offset)"]
@@ -28,7 +28,7 @@ flowchart LR
     E --> VS[(Vector store)]
     X --> IS[(Item + brief store)]
 
-    subgraph query["Query — every question"]
+    subgraph query["Query (every question)"]
         direction TB
         Q[Question + history] --> RT{aggregation?}
         RT -->|list / summarise| AG[Answer from items]
@@ -74,7 +74,7 @@ attributed to one speaker. True "who spoke when" needs the raw waveform and a
 speaker-embedding model (VAD → x-vectors → clustering, e.g. pyannote), which is
 impractical client-side. The intended fix is a server-side transcription backend
 (Deepgram / AssemblyAI / Whisper+pyannote) that returns diarised turns and drops
-in at the `Transcriber` seam — see §4.
+in at the `Transcriber` seam (see §4).
 
 ---
 
@@ -93,7 +93,7 @@ flowchart TD
     FAC --> RET[retrieval.retriever<br/>+ planner]
     FAC --> ANS[generation.answerer<br/>+ conversation, aggregate]
 
-    subgraph seams["Interfaces — the swappable seams"]
+    subgraph seams["Interfaces (the swappable seams)"]
         IT[Transcriber]
         IE[Embedder]
         IV[VectorStore]
@@ -113,7 +113,7 @@ flowchart TD
 ```
 
 Reading this top to bottom: the transport and orchestration layers know nothing
-about MiniLM, Chroma, or Cohere — they hold interface references. The concrete
+about MiniLM, Chroma, or Cohere; they hold interface references. The concrete
 classes on the bottom row are interchangeable, and which one is live is a config
 flag resolved in the factory. The UI is a pure HTTP client and never imports the
 core, so it could be replaced wholesale without touching the pipeline.
@@ -139,7 +139,7 @@ flip a flag." No pipeline code changes.
 | `Transcriber` | browser Web Speech API | Deepgram / Whisper+pyannote (diarised) | (new backend) |
 
 The `fake` / `memory` / `echo` implementations exist specifically so the whole
-system — and its tests — run with zero API keys and no model downloads. That is
+system, and its tests, run with zero API keys and no model downloads. That is
 what CI and the [zero-key demo](../docker-compose.demo.yml) use.
 
 ---
@@ -245,7 +245,7 @@ sequenceDiagram
         SV-->>API: Answer (enumerated, each cited)
     else retrieval
         SV->>L: rewrite follow-up → standalone query
-        SV->>R: candidates(query) — embed + search top_n
+        SV->>R: candidates(query): embed + search top_n
         R-->>SV: wide-net candidates + similarity
         SV->>PL: plan_blocks (group by meeting, pick top meetings,<br/>expand hits with neighbours)
         PL->>IS: brief per selected meeting
