@@ -32,9 +32,6 @@ docker compose -f docker-compose.demo.yml up --build
 Then open the UI: **http://localhost:8501**
 (API is on http://localhost:8000 — try http://localhost:8000/health)
 
-> If 8000/8501 are already in use, remap the host ports in
-> `docker-compose.demo.yml` (e.g. `18000:8000`).
-
 In the UI, click one of the **example prompts** (e.g. *"List all the action
 items across every meeting"*) and the grounded, cited answer appears. The
 answer text is extractive in this profile — the echo LLM doesn't reason — but
