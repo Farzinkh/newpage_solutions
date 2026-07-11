@@ -2,8 +2,9 @@
 
 A conversational assistant that answers questions about meeting transcripts —
 decisions, action items, "what did we say about X" — with answers grounded in
-the transcript and cited back to the speaker and timestamp. Supports both
-uploaded transcript files and browser voice-to-text.
+the transcript and cited back to the speaker, meeting, and (absolute) timestamp.
+Handles questions that span several meetings, and supports both uploaded
+transcript files and browser voice-to-text.
 
 This is **Option 3** from the assignment. The README is the part I care most
 about: the code is the easy half; the reasoning below is the argument for *why*
@@ -64,26 +65,30 @@ Docker:
 ## Architecture
 
 ```
-                 ┌── file  ──> FileTranscriber ──┐
-   input ────────┤                               ├──> Turns ──> preprocess (clean + redact PII)
-                 └── voice ──> PlainTextTranscriber┘                       │
-                                                                           ▼
-                                                            chunk per speaker turn
-                                                                           │
-                                                                           ▼
-                                                        embed ──> Chroma (vector store)
-                                                                           │
-   question ──> embed ──> search top-N ──> Cohere rerank ──> top-k ────────┘
-                                                     │
-                                                     ▼
-                              LLM (grounding prompt) ──> answer + citations
+   input ──(file | voice)──> Turns ──> preprocess ──> ┌─ chunk ──> embed ──> vector store
+                                    (clean + redact +  │
+                                     stamp abs. time)  └─ extract decisions /
+                                                          action items ──> item + brief store
+
+   question + history ──> aggregation? ──yes──> answer from items (enumerated, cited)
+                              │ no
+                              ▼
+        stage 1: pick meeting(s) + inject their briefs
+                              │
+                              ▼
+        stage 2: dig top hits + their before/after context
+                              │
+                              ▼
+        LLM (grounded, grouped-by-meeting prompt) ──> answer + citations
 ```
 
 Ingestion runs once per transcript; the query path runs per question. Both input
 sources converge to `Turns` at the transcriber seam, so everything after it is
-shared. See [`docs/architecture.md`](docs/architecture.md) for the fuller
-diagrams — the dual-input flow, layer dependencies, domain model, and the query
-lifecycle.
+shared. Retrieval is two-stage (pick the meetings that matter, then dig each with
+neighbour context); reranking is wired but off by default (the eval showed it
+didn't help — see below). See [`docs/architecture.md`](docs/architecture.md) for
+the fuller Mermaid diagrams — the dual-input flow, layer dependencies, domain
+model, and the two-stage query lifecycle.
 
 ### Module layout
 
@@ -220,11 +225,13 @@ lot for meetings specifically, and each has its own mechanism:
    conventions don't leak into identifiers or the eval.)
 
 **Prompt & context management.** The LLM gets, in order: the recent conversation
-(if any), the non-citable meeting brief (if scoped to a meeting), then a numbered
-list of retrieved excerpts each prefixed with `[n] (speaker @ timestamp)`, and a
-system prompt that says: answer only from the numbered excerpts, cite as `[n]`,
-never cite the brief or history, and if the answer isn't there say exactly "Not
-discussed in the transcript." `temperature=0` for determinism.
+(if any), then the retrieved context **grouped by meeting** — each meeting block
+is its non-citable brief followed by numbered excerpts, each prefixed with
+`[n] (meeting · speaker @ time)` and marked `(context)` when it's a
+before/after neighbour rather than a hit — and a system prompt that says: answer
+only from the numbered excerpts, cite as `[n]`, never cite the brief or history,
+and if the answer isn't there say exactly "Not discussed in the transcript."
+`temperature=0` for determinism.
 
 **Guardrails — two layers.** (1) The grounding prompt above. (2) An *output*
 check: I parse the `[n]` citations the model emits, drop any that point outside
@@ -242,10 +249,11 @@ citation. Placeholders are typed (`[EMAIL]`) not blanks, so the sentence still
 reads naturally for the embedder. The regex layer is a baseline; Presidio (spaCy
 NER) is the documented upgrade for names-in-context and loads lazily if installed.
 
-**Observability.** Every query logs one JSON line: the question, retrieved chunk
+**Observability.** Every query logs one JSON line: the question, the route taken
+(aggregation vs. retrieval, and how many meetings it spanned), retrieved chunk
 ids, similarity and rerank scores, grounded flag, and per-stage latency
-(embed / search / rerank / llm / total). The UI surfaces the same scores under
-each answer. Only redaction *counts* are logged, never raw PII values.
+(embed / search / llm / total). The UI surfaces the same scores under each answer.
+Only redaction *counts* are logged, never raw PII values.
 
 **Quality — a real eval harness.** `eval/gold_set.json` maps hand-curated
 questions to the turns that answer them; `eval/evaluate.py` computes hit-rate@k

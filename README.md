@@ -67,11 +67,11 @@ for the local Python setup, tests, and the retrieval eval harness.
   retrieval (two-stage cross-meeting), guardrails, observability, what I'd
   productionise, engineering standards, and how AI tools were used. **Start here
   for the reasoning.**
-- **[`architecture.md`](architecture.md)** — architecture diagrams (Mermaid):
-  the runtime phases, dual-input flow, layer boundaries, domain model, and the
-  lifecycle of a query.
 - **[`meeting-intelligence/docs/architecture.md`](meeting-intelligence/docs/architecture.md)**
-  — the same diagrams kept alongside the code.
+  — architecture diagrams (Mermaid): the two runtime phases, dual-input flow,
+  layer boundaries, domain model, and the two-stage query lifecycle. (The root
+  [`architecture.md`](architecture.md) just points here, to avoid a duplicate
+  that could drift.)
 
 ---
 
