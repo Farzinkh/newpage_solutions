@@ -11,10 +11,16 @@ This is **Option 3** (Meeting Intelligence) of the assignment. The code lives in
 
 ---
 
-## 📹 Demo video
+## 📹 Demo & screenshot
 
 A short walkthrough of the app:
 **[Watch the demo on Loom](https://www.loom.com/share/da7084cd4c67456dba89bd2534fe99d2)**
+
+![Meeting Intelligence UI](meeting-intelligence/docs/screenshot-app.png)
+
+*Answering "List all the action items across every meeting" — the aggregation
+route enumerates every item across all three meetings, each attributed to its
+meeting with an absolute timestamp.*
 
 ---
 
